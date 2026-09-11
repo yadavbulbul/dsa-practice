@@ -1,291 +1,191 @@
-/*
-Class diagram to code checklist
-Use this flow when coding from the class diagram:
-
-1. Start with the core entity
-
-    Document
-    owns content, metadata, versions, collaborators
-2. Add the polymorphic content model
-
-    DocumentElement
-    TextElement
-    ImageElement
-3. Add the access layer
-
-    User
-    AccessControl
-    permission checks before edits
-4. Add versioning
-
-    DocumentVersion
-    snapshot creation when document changes
-5. Add export behavior separately
-
-    ExportStrategy
-    PDFExportStrategy
-    DOCXExportStrategy
-    HTMLExportStrategy
-6. Add the controller
-
-    DocumentEditor
-    orchestrates actions like addText, addImage, saveVersion, exportDocument
-7. Code with modern C++ practices
-
-    prefer unique_ptr
-    avoid raw pointers unless absolutely needed
-    keep interfaces abstract
-    separate responsibilities cleanly
-
-*/
-
-
-
-#include <iostream>
-#include <memory>
-#include <string>
-#include <unordered_map>
-#include <vector>
+#include<iostream>
+#include<string>
+#include<vector>
 using namespace std;
 
-enum class ExportFormat {
-    PDF,
-    DOCX,
-    HTML
+//abstract class
+class DocumentElement{
+public:
+    virtual string render() = 0;
+    virtual ~DocumentElement(){}
 };
 
-class User {
+//childclasses
+class TextElement:public DocumentElement{
+private:
+    string text;
+public:
+    TextElement(string text){
+        this->text=text;
+    }
+    string render() override{
+        return "Text: "+text;
+    }
+};
+
+class ImageElement:public DocumentElement{
+private:
+    string imagePath;
+public:
+    ImageElement(string imagePath){
+        this->imagePath=imagePath;
+    }
+    string render() override{
+        //business logic for displaying image
+        return "Image: "+imagePath;
+    }
+};
+
+
+class User{
 private:
     string id;
     string name;
     bool canEdit;
-
 public:
-    User(string userId, string userName, bool editAccess)
-        : id(move(userId)), name(move(userName)), canEdit(editAccess) {}
-
-    const string& getId() const {
+    User(string userId,string userName,bool editAccess){
+        this->id=userId;
+        this->name=userName;
+        this->canEdit=editAccess;
+    }
+    string getId(){
         return id;
     }
-
-    const string& getName() const {
+    string getName(){
         return name;
     }
-
-    bool hasEditAccess() const {
+    bool hasEditAccess(){
         return canEdit;
     }
 };
 
-class DocumentElement {
-public:
-    virtual ~DocumentElement() = default;
-    virtual string render() const = 0;
-};
-
-class TextElement : public DocumentElement {
-private:
-    string text;
-
-public:
-    explicit TextElement(string value) : text(move(value)) {}
-
-    string render() const override {
-        return "Rendering Text Element: " + text;
-    }
-};
-
-class ImageElement : public DocumentElement {
-private:
-    string imagePath;
-
-public:
-    explicit ImageElement(string path) : imagePath(move(path)) {}
-
-    string render() const override {
-        return "Rendering Image Element: " + imagePath;
-    }
-};
-
-class DocumentVersion {
+class DocumentVersion{
 private:
     string versionId;
     string snapshot;
-
 public:
-    DocumentVersion(string id, string content)
-        : versionId(move(id)), snapshot(move(content)) {}
-
-    const string& getVersionId() const {
+    DocumentVersion(string id,string content){
+        this->versionId=id;
+        this->snapshot=content;
+    }
+    string getVersionId(){
         return versionId;
     }
-
-    const string& getSnapshot() const {
+    string getSnapshot(){
         return snapshot;
     }
 };
 
-class AccessControl {
-private:
-    unordered_map<string, bool> permissionMap;
-
-public:
-    void grantAccess(const User& user, bool editPermission) {
-        permissionMap[user.getId()] = editPermission;
-    }
-
-    bool canEdit(const User& user) const {
-        auto it = permissionMap.find(user.getId());
-        return it != permissionMap.end() && it->second;
-    }
-};
-
-class Document {
+class Document{
 private:
     string id;
     string title;
-    vector<unique_ptr<DocumentElement>> elements;
-    vector<User> collaborators;
-    vector<DocumentVersion> versions;
-    AccessControl accessControl;
-
+    vector<DocumentElement*>elements;
+    vector<DocumentVersion>versions;
+    vector<User>collaborators;
 public:
-    Document(string documentId, string documentTitle)
-        : id(move(documentId)), title(move(documentTitle)) {}
-
-    void addElement(unique_ptr<DocumentElement> element) {
-        elements.push_back(move(element));
+    Document(string id,string title){
+        this->id=id;
+        this->title=title;
     }
 
-    void shareWithUser(const User& user) {
+    void addElement(DocumentElement* element){
+        elements.push_back(element);
+    }
+
+    void addCollaborator(User user){
         collaborators.push_back(user);
-        accessControl.grantAccess(user, user.hasEditAccess());
     }
 
-    bool canUserEdit(const User& user) const {
-        return accessControl.canEdit(user);
+    void addVersion(DocumentVersion version){
+        versions.push_back(version);
     }
 
-    void createVersion() {
-        string snapshot;
-        for (const auto& element : elements) {
-            snapshot += element->render() + "\n";
+    string getSnapshot(){
+        string snapshot = "";
+        for(DocumentElement* element : elements){
+            snapshot += element->render();
+            snapshot += "\n";
         }
-        versions.emplace_back("v" + to_string(versions.size() + 1), snapshot);
+        return snapshot;
     }
 
-    string renderDocument() const {
-        string output;
-        for (const auto& element : elements) {
-            output += element->render() + "\n";
-        }
-        return output;
-    }
-
-    const string& getTitle() const {
-        return title;
-    }
-
-    const string& getId() const {
-        return id;
-    }
 };
 
-class ExportStrategy {
+//abstract class
+class ExportStrategy{
 public:
-    virtual ~ExportStrategy() = default;
-    virtual void exportDocument(const Document& doc, ExportFormat format) const = 0;
+    virtual void exportDocument(Document* doc) = 0;
+    virtual ~ExportStrategy(){}
 };
 
-class PDFExportStrategy : public ExportStrategy {
+//child
+class PDFExportStrategy:public ExportStrategy{
 public:
-    void exportDocument(const Document& doc, ExportFormat format) const override {
-        if (format != ExportFormat::PDF) {
-            cout << "PDF strategy cannot export this format." << endl;
-            return;
-        }
-        cout << "Exporting '" << doc.getTitle() << "' to PDF." << endl;
+    void exportDocument(Document* doc){
+        //logic to export in pdf
+        cout<<"Doc exported in PDF format";
     }
 };
-
-class DOCXExportStrategy : public ExportStrategy {
+class DOCXExportStrategy:public ExportStrategy{
 public:
-    void exportDocument(const Document& doc, ExportFormat format) const override {
-        if (format != ExportFormat::DOCX) {
-            cout << "DOCX strategy cannot export this format." << endl;
-            return;
-        }
-        cout << "Exporting '" << doc.getTitle() << "' to DOCX." << endl;
+    void exportDocument(Document* doc){
+        //logic to export in docx
+        cout<<"Doc exported in DOCX format";
     }
 };
-
-class HTMLExportStrategy : public ExportStrategy {
+class HTMLExportStrategy:public ExportStrategy{
 public:
-    void exportDocument(const Document& doc, ExportFormat format) const override {
-        if (format != ExportFormat::HTML) {
-            cout << "HTML strategy cannot export this format." << endl;
-            return;
-        }
-        cout << "Exporting '" << doc.getTitle() << "' to HTML." << endl;
+    void exportDocument(Document* doc){
+        //logic to export in html
+        cout<<"Doc exported in HTML format";
     }
 };
 
-class DocumentEditor {
-private:
-    Document document;
-    unique_ptr<ExportStrategy> exportStrategy;
 
+//controller
+class DocumentEditor{
 public:
-    DocumentEditor(string documentId, string title, unique_ptr<ExportStrategy> strategy)
-        : document(move(documentId), move(title)), exportStrategy(move(strategy)) {}
+    void addText(Document* doc, string text){
+        TextElement* element = new TextElement(text);
 
-    void addText(string text) {
-        if (!document.canUserEdit(User("current-user", "Current User", true))) {
-            cout << "Current user cannot edit this document." << endl;
-            return;
-        }
-        document.addElement(make_unique<TextElement>(move(text)));
+        doc->addElement(element);
     }
 
-    void addImage(string imagePath) {
-        if (!document.canUserEdit(User("current-user", "Current User", true))) {
-            cout << "Current user cannot edit this document." << endl;
-            return;
-        }
-        document.addElement(make_unique<ImageElement>(move(imagePath)));
+    void addImage(Document* doc,string imagePath){
+        ImageElement* element = new ImageElement(imagePath);
+        doc->addElement(element);
     }
 
-    void shareWithUser(const User& user) {
-        document.shareWithUser(user);
+    void saveVersion(Document* doc) {
+        string snapshot = doc->getSnapshot();
+
+        DocumentVersion version("V1", snapshot);
+
+        doc->addVersion(version);
     }
 
-    void saveVersion() {
-        document.createVersion();
-    }
-
-    void renderDocument() const {
-        cout << document.renderDocument();
-    }
-
-    void exportDocument(ExportFormat format) {
-        exportStrategy->exportDocument(document, format);
+    void exportDocument(Document* doc,ExportStrategy* strategy){
+        strategy->exportDocument(doc);
     }
 };
 
-int main() {
-    DocumentEditor editor("doc-101", "Team Meeting Notes", make_unique<PDFExportStrategy>());
+int main(){
 
-    User alice("u-1", "Alice", true);
-    User bob("u-2", "Bob", false);
+    //create a document
+    Document doc("D1","Document 1");
 
-    editor.shareWithUser(alice);
-    editor.shareWithUser(bob);
+    DocumentEditor editor;
 
-    editor.addText("Agenda for today");
-    editor.addImage("meeting-diagram.png");
-    editor.saveVersion();
-    editor.renderDocument();
-    editor.exportDocument(ExportFormat::PDF);
+    editor.addText(&doc,"text1");
 
+    editor.addImage(&doc,"image.png");
+
+    editor.saveVersion(&doc);
+
+    //Export as PDF
+    PDFExportStrategy pdf;
+    editor.exportDocument(&doc, &pdf);
+    
     return 0;
 }
